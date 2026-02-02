@@ -368,15 +368,6 @@ Expected: **400 Bad Request** - "Order validation failed: Minimum order value is
 
 ---
 
-## 🚀 Run Project
-      "unitPrice": 1500.00
-    }
-  ]
-}
-```
-
----
-
 ## Benefits of API-Led Architecture
 
 ### 1. ♻️ **Reusability**
@@ -467,7 +458,7 @@ System APIs directly call **Salesforce REST API**:
 ### Step 1: Test System API
 ```bash
 # Create Customer
-curl -X POST http://localhost:8081/api/system/customer/customers \
+curl -X POST http://localhost:8081/customers \
   -H "Content-Type: application/json" \
   -d '{
     "customerName": "Test Company",
@@ -484,8 +475,8 @@ curl -X POST http://localhost:8081/api/system/customer/customers \
 
 ### Step 2: Test Process API
 ```bash
-# Create Order (với existing customer)
-curl -X POST http://localhost:8082/api/process/customer-orders/customer-orders \
+# Create Order (with existing customer)
+curl -X POST http://localhost:8082/customer-orders \
   -H "Content-Type: application/json" \
   -d '{
     "customer": {
@@ -502,7 +493,7 @@ curl -X POST http://localhost:8082/api/process/customer-orders/customer-orders \
 ### Step 3: Test Experience API
 ```bash
 # Web Order
-curl -X POST http://localhost:8084/api/web/orders \
+curl -X POST http://localhost:8084/api/orders \
   -H "Content-Type: application/json" \
   -d '{
     "customer": {
@@ -516,7 +507,7 @@ curl -X POST http://localhost:8084/api/web/orders \
   }'
 
 # Mobile Order (same request, different response format)
-curl -X POST http://localhost:8085/api/mobile/orders \
+curl -X POST http://localhost:8085/api/orders \
   -H "Content-Type: application/json" \
   -d '<same-body-as-web>'
 ```
