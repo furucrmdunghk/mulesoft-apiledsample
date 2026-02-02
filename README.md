@@ -1,22 +1,22 @@
 # API-Led Connectivity Sample - MuleSoft
 
-Dự án mẫu thể hiện kiến trúc **API-Led Connectivity** của MuleSoft với 3 tầng API:
-- **Experience APIs** (Tầng trải nghiệm) - RAML validation, APIKit router
-- **Process APIs** (Tầng xử lý nghiệp vụ) - Business validation
-- **System APIs** (Tầng hệ thống) - Salesforce integration
+Sample project demonstrating MuleSoft's **API-Led Connectivity** architecture with 3 API layers:
+- **Experience APIs** (Experience Layer) - RAML validation, APIKit router
+- **Process APIs** (Process Layer) - Business validation
+- **System APIs** (System Layer) - Salesforce integration
 
-## ✨ Tính năng chính (Updated Feb 2026)
+## ✨ Key Features (Updated Feb 2026)
 
 ### 🎯 API Validation Strategy
-- **RAML Validation** ở Experience APIs (Web & Mobile)
+- **RAML Validation** at Experience APIs (Web & Mobile)
   - Contract validation: required fields, data types, constraints
-  - APIKit router pattern với main flow + implementation flow
-  - Comprehensive error handlers cho validation errors
+  - APIKit router pattern with main flow + implementation flow
+  - Comprehensive error handlers for validation errors
   
-- **Business Validation** ở Process API
+- **Business Validation** at Process API
   - Cross-field calculations (RAML cannot validate)
   - Example: Minimum order value $100
-  - Centralized business rules cho tất cả channels
+  - Centralized business rules for all channels
 
 ### 🛡️ Error Handling Pattern
 - **Experience APIs**: 
@@ -26,10 +26,10 @@ Dự án mẫu thể hiện kiến trúc **API-Led Connectivity** của MuleSoft
   - `ANY` - Fallback for unexpected errors
   
 - **Process APIs**: 
-  - Business validation errors với descriptive messages
-  - Propagate errors lên Experience APIs
+  - Business validation errors with descriptive messages
+  - Propagate errors to Experience APIs
 
-## Kiến trúc
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -73,12 +73,12 @@ Dự án mẫu thể hiện kiến trúc **API-Led Connectivity** của MuleSoft
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## APIs Chi tiết
+## API Details
 
 ### 🔷 SYSTEM API (Port 8081)
 
 #### Customer System API
-Truy cập trực tiếp vào Salesforce để quản lý Accounts, Contacts và Orders.
+Direct access to Salesforce for managing Accounts, Contacts and Orders.
 
 **1. Create Customer**
 ```
@@ -124,13 +124,13 @@ POST http://localhost:8081/orders
 ### 🔶 PROCESS API
 
 #### Customer Orders Process API (Port 8082)
-Orchestrates business logic cho order processing.
+Orchestrates business logic for order processing.
 
 **Endpoint**: `POST http://localhost:8082/customer-orders`
 
 **Business Rules**:
 - ✅ Minimum order value: $100
-- ✅ Automatic customer creation nếu chưa tồn tại
+- ✅ Automatic customer creation if not exists
 - ✅ Order total calculation: sum(quantity × unitPrice)
 - ✅ Salesforce Account & Order creation
 
@@ -184,11 +184,11 @@ Orchestrates business logic cho order processing.
 
 #### 1. Web Experience API (Port 8084)
 
-**Đặc điểm**:
+**Features**:
 - ✅ RAML validation (required fields, data types, constraints)
-- ✅ APIKit router với comprehensive error handling
-- 🎨 Rich response format với detailed information
-- 🖥️ Optimized cho web browsers (WiFi/LAN)
+- ✅ APIKit router with comprehensive error handling
+- 🎨 Rich response format with detailed information
+- 🖥️ Optimized for web browsers (WiFi/LAN)
 
 **Endpoint**: `POST http://localhost:8084/api/orders`
 
@@ -251,11 +251,11 @@ Orchestrates business logic cho order processing.
 
 #### 2. Mobile Experience API (Port 8085)
 
-**Đặc điểm**:
+**Features**:
 - ✅ RAML validation (same rules as Web)
 - ✅ APIKit router pattern
 - 📱 Minimal payload (~70% smaller than Web)
-- ⚡ Optimized cho mobile networks (3G/4G/5G)
+- ⚡ Optimized for mobile networks (3G/4G/5G)
 - 🔋 Battery & bandwidth efficient
 
 **Endpoint**: `POST http://localhost:8085/api/orders`
@@ -375,87 +375,58 @@ Expected: **400 Bad Request** - "Order validation failed: Minimum order value is
 }
 ```
 
-#### 2. Mobile API (Port 8085)
-- **Endpoint**: `POST http://localhost:8085/api/mobile/orders`
-- **Mô tả**: API tối ưu cho Mobile App
-- **Format**: Response ngắn gọn, tiết kiệm bandwidth
-
-#### 3. Customer Service API (Port 8086)
-- **Endpoint 1**: `GET http://localhost:8086/api/customer-service/customer/{customerId}`
-  - Lấy thông tin customer đầy đủ cho Customer Service
-  
-- **Endpoint 2**: `POST http://localhost:8086/api/customer-service/process-order`
-  - Xử lý đơn hàng kèm fulfillment (aggregated flow)
-  - Gọi cả Customer Orders API và Order Fulfillment API
-
-**Request Body**:
-```json
-{
-  "customer": {
-    "customerId": "0015g00000XYZ123"
-  },
-  "items": [
-    {
-      "productName": "Service Package",
-      "quantity": 1,
-      "unitPrice": 500.00
-    }
-  ]
-}
-```
-
 ---
 
-## Ưu điểm của kiến trúc API-Led
+## Benefits of API-Led Architecture
 
-### 1. ♻️ **Reusability (Tái sử dụng)**
-- System APIs có thể được gọi bởi nhiều Process APIs
-- Process APIs có thể được gọi bởi nhiều Experience APIs
-- Giảm duplicate code và effort
+### 1. ♻️ **Reusability**
+- System APIs can be called by multiple Process APIs
+- Process APIs can be called by multiple Experience APIs
+- Reduces duplicate code and effort
 
 ### 2. 🔌 **Loose Coupling**
-- Mỗi tầng độc lập với nhau
-- Thay đổi implementation ở System API không ảnh hưởng Experience API
-- Dễ dàng thay thế backend systems
+- Each layer is independent
+- Changes in System API implementation don't affect Experience API
+- Easy to replace backend systems
 
 ### 3. 🎯 **Separation of Concerns**
-- **System APIs**: Chỉ lo kết nối với hệ thống backend (Salesforce)
-- **Process APIs**: Xử lý business logic, orchestration
-- **Experience APIs**: Tối ưu cho từng channel (Web, Mobile, CS)
+- **System APIs**: Only handles connection to backend systems (Salesforce)
+- **Process APIs**: Handles business logic and orchestration
+- **Experience APIs**: Optimized for each channel (Web, Mobile, etc.)
 
 ### 4. 📱 **Channel-Specific Optimization**
-- Web API: Response đầy đủ, human-readable
-- Mobile API: Response compact, tiết kiệm bandwidth
-- Customer Service API: Aggregated data, rich information
+- Web API: Full response, human-readable
+- Mobile API: Compact response, bandwidth efficient
+- Each channel gets optimal data format
 
 ### 5. 🔒 **Security Layers**
-- Có thể apply security policies riêng cho từng tầng
-- Rate limiting, throttling theo từng API
+- Can apply different security policies per layer
+- Rate limiting and throttling per API
 
 ### 6. 📊 **Monitoring & Analytics**
-- Track usage theo từng tầng
-- Identify bottlenecks dễ dàng hơn
-- Business metrics ở Process layer
+- Track usage by layer
+- Easier to identify bottlenecks
+- Business metrics at Process layer
 
 ---
 
-## Cấu hình
+## Configuration
 
 ### 1. Setup Salesforce Connected App
-**⚠️ BẮT BUỘC**: Bạn cần tạo Connected App trong Salesforce để lấy OAuth 2.0 credentials.
+**⚠️ REQUIRED**: You need to create a Connected App in Salesforce to get OAuth 2.0 credentials.
 
-👉 **Chi tiết**: Xem file [SALESFORCE_CONNECTED_APP_SETUP.md](SALESFORCE_CONNECTED_APP_SETUP.md)
+👉 **Details**: See file [SALESFORCE_CONNECTED_APP_SETUP.md](SALESFORCE_CONNECTED_APP_SETUP.md)
 
-Tóm tắt steps:
+Summary steps:
 1. Salesforce Setup → App Manager → New Connected App
 2. Enable OAuth Settings + Client Credentials Flow
-3. Chọn "Run As User" có quyền API
-4. Copy Consumer Key và Consumer Secret
-5. Update vào config files
+3. Select "Run As User" with API permissions
+4. Copy Consumer Key and Consumer Secret
+5. Update config files
 
 ### 2. Update Configuration Files
 
-Cập nhật file [src/main/resources/config.yaml](src/main/resources/config.yaml):
+Update file [src/main/resources/config.yaml](src/main/resources/config.yaml):
 
 ```yaml
 salesforce:
@@ -470,22 +441,22 @@ salesforce:
 ```
 
 ### 3. Environment-specific Config
-Cho development/sandbox, update `config-dev.yaml` với sandbox credentials.
+For development/sandbox, update `config-dev.yaml` with sandbox credentials.
 
 ---
 
-## Kiến trúc kỹ thuật
+## Technical Architecture
 
-### Authentication với Salesforce
-- **OAuth 2.0 Client Credentials Flow** (không cần username/password)
-- Connected App với Consumer Key/Secret
-- Access token tự động refresh bởi Mule OAuth Module
-- Secure, không lưu password trong code
+### Authentication with Salesforce
+- **OAuth 2.0 Client Credentials Flow** (no username/password needed)
+- Connected App with Consumer Key/Secret
+- Access token automatically refreshed by Mule OAuth Module
+- Secure, no password stored in code
 
 ### REST API Endpoints
-System APIs gọi trực tiếp **Salesforce REST API**:
-- `POST /services/data/v60.0/sobjects/Account` - Tạo Account
-- `POST /services/data/v60.0/sobjects/Contact` - Tạo Contact
+System APIs directly call **Salesforce REST API**:
+- `POST /services/data/v60.0/sobjects/Account` - Create Account
+- `POST /services/data/v60.0/sobjects/Contact` - Create Contact
 - `GET /services/data/v60.0/sobjects/Account/{id}` - Get Account
 - `GET /services/data/v60.0/query?q=SELECT...` - SOQL Query
 
@@ -493,7 +464,7 @@ System APIs gọi trực tiếp **Salesforce REST API**:
 
 ## Testing Flow
 
-### Bước 1: Test System API
+### Step 1: Test System API
 ```bash
 # Create Customer
 curl -X POST http://localhost:8081/api/system/customer/customers \
@@ -508,17 +479,17 @@ curl -X POST http://localhost:8081/api/system/customer/customers \
     }]
   }'
 
-# Response sẽ trả về accountId, lưu lại để test tiếp
+# Response will return accountId, save it for next tests
 ```
 
-### Bước 2: Test Process API
+### Step 2: Test Process API
 ```bash
 # Create Order (với existing customer)
 curl -X POST http://localhost:8082/api/process/customer-orders/customer-orders \
   -H "Content-Type: application/json" \
   -d '{
     "customer": {
-      "customerId": "<accountId-từ-bước-1>"
+      "customerId": "<accountId-from-step-1>"
     },
     "orderItems": [{
       "productName": "Product A",
@@ -528,14 +499,14 @@ curl -X POST http://localhost:8082/api/process/customer-orders/customer-orders \
   }'
 ```
 
-### Bước 3: Test Experience API
+### Step 3: Test Experience API
 ```bash
 # Web Order
 curl -X POST http://localhost:8084/api/web/orders \
   -H "Content-Type: application/json" \
   -d '{
     "customer": {
-      "customerId": "<accountId-từ-bước-1>"
+      "customerId": "<accountId-from-step-1>"
     },
     "items": [{
       "productName": "Laptop",
@@ -554,7 +525,7 @@ curl -X POST http://localhost:8085/api/mobile/orders \
 
 ## Error Handling
 
-Tất cả APIs đều có global error handler với format:
+All APIs have global error handler with format:
 ```json
 {
   "error": {
@@ -568,10 +539,10 @@ Tất cả APIs đều có global error handler với format:
 
 ## Correlation ID
 
-Mỗi request được track bởi `x-correlation-id` header:
-- Tự động generate nếu client không gửi
-- Được truyền qua tất cả các tầng API
-- Giúp trace request end-to-end
+Each request is tracked by `x-correlation-id` header:
+- Auto-generated if client doesn't send
+- Passed through all API layers
+- Helps trace request end-to-end
 
 ---
 
@@ -585,30 +556,30 @@ Mỗi request được track bởi `x-correlation-id` header:
 
 ---
 
-## Ưu điểm của approach này
+## Advantages of This Approach
 
-### ✅ **Sử dụng Salesforce REST API**
-- Không cần Salesforce Connector (premium)
-- Chỉ dùng HTTP Connector + OAuth Module (free)
+### ✅ **Using Salesforce REST API**
+- No need for Salesforce Connector (premium)
+- Only uses HTTP Connector + OAuth Module (free)
 - No license issues
-- Flexible và modern
+- Flexible and modern
 
 ### ✅ **OAuth 2.0 Client Credentials**
 - Best practice authentication
-- Secure - không lưu password
+- Secure - no password stored
 - Auto token refresh
 - Production-ready
 
 ---
 
-## Ghi chú
+## Notes
 
-⚠️ **Chưa implement**: Flow tạo Order__c (custom object) trong Salesforce do custom object chưa được tạo trong Salesforce org.
+⚠️ **Not yet implemented**: Flow to create Order__c (custom object) in Salesforce because custom object has not been created in Salesforce org.
 
-Khi custom object Order__c đã sẵn sàng, có thể thêm System API tương tự như Customer API.
+When custom object Order__c is ready, can add System API similar to Customer API.
 
 ---
 
-## Liên hệ
+## Contact
 
-Dự án mẫu cho mục đích demo kiến trúc API-Led Connectivity của MuleSoft.
+Sample project for demonstrating MuleSoft's API-Led Connectivity architecture.
