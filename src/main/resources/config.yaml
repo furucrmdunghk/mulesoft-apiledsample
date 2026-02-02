@@ -1,0 +1,51 @@
+# Configuration file for all environments
+
+http:
+  # System APIs
+  system:
+    customer:
+      host: "0.0.0.0"
+      port: "8081"
+      basePath: "/api/system/customer"
+  
+  # Process APIs
+  process:
+    customerOrders:
+      host: "0.0.0.0"
+      port: "8082"
+      basePath: "/api/process/customer-orders"
+    orderFulfillment:
+      host: "0.0.0.0"
+      port: "8083"
+      basePath: "/api/process/order-fulfillment"
+  
+  # Experience APIs
+  experience:
+    web:
+      host: "0.0.0.0"
+      port: "8084"
+      basePath: "/api/web"
+    mobile:
+      host: "0.0.0.0"
+      port: "8085"
+      basePath: "/api/mobile"
+    customerService:
+      host: "0.0.0.0"
+      port: "8086"
+      basePath: "/api/customer-service"
+
+# Salesforce REST API Configuration (via Connected App)
+salesforce:
+  # Connected App OAuth 2.0 Credentials
+  clientId: "your-connected-app-consumer-key"
+  clientSecret: "your-connected-app-consumer-secret"
+  
+  # Salesforce Instance URLs
+  tokenUrl: "https://login.salesforce.com/services/oauth2/token"
+  instanceUrl: "https://your-instance.salesforce.com"
+  apiVersion: "v60.0"
+  
+# Logging
+logging:
+  level: "INFO"
+  correlationId: "x-correlation-id"

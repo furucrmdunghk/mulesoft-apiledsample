@@ -1,0 +1,14 @@
+# Development environment configuration
+
+salesforce:
+  # Connected App OAuth 2.0 Credentials (Sandbox)
+  clientId: "dev-connected-app-consumer-key"
+  clientSecret: "dev-connected-app-consumer-secret"
+  
+  # Salesforce Sandbox URLs
+  tokenUrl: "https://test.salesforce.com/services/oauth2/token"
+  instanceUrl: "https://your-dev-instance.sandbox.salesforce.com"
+  apiVersion: "v60.0"
+
+logging:
+  level: "DEBUG"
