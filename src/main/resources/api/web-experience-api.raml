@@ -1,7 +1,7 @@
 #%RAML 1.0
 title: Web Experience API
 version: v1
-baseUri: http://localhost:8084
+baseUri: http://localhost:8084/api
 mediaType: application/json
 
 documentation:
@@ -19,15 +19,18 @@ types:
     properties:
       productName:
         type: string
+        required: true
         description: Product name
         example: "Laptop"
       quantity:
         type: integer
+        required: true
         minimum: 1
         description: Quantity ordered
         example: 2
       unitPrice:
         type: number
+        required: true
         minimum: 0
         description: Unit price
         example: 1200.00
@@ -37,6 +40,7 @@ types:
     properties:
       customerName:
         type: string
+        required: true
         description: Customer name
         example: "ACME Corporation"
       phone:
@@ -49,11 +53,14 @@ types:
     properties:
       customer:
         type: CustomerInfo
+        required: true
         description: Customer information
       items:
         type: OrderItem[]
+        required: true
         minItems: 1
-        description: Order items
+        maxItems: 1
+        description: Order items (only 1 product allowed per order)
 
   OrderSummary:
     type: object

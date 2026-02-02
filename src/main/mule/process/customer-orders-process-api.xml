@@ -67,15 +67,19 @@ output application/json
 			variableName="originalRequest" 
 			doc:name="Store Original Request" />
 		
-		<!-- Business Logic: Validate Order -->
-		<ee:transform doc:name="Validate Order">
+		<!-- Business Logic: Validate Minimum Order Value -->
+		<!-- RAML cannot validate cross-field calculations -->
+		<ee:transform doc:name="Validate Minimum Order Value">
 			<ee:variables>
-				<ee:set-variable variableName="isValidOrder"><![CDATA[%dw 2.0
+				<ee:set-variable variableName="orderTotal"><![CDATA[%dw 2.0
 output application/java
 ---
-payload.customer != null and 
-payload.orderItems != null and 
-sizeOf(payload.orderItems) > 0]]></ee:set-variable>
+sum(payload.orderItems map ($.quantity * $.unitPrice))]]></ee:set-variable>
+				<ee:set-variable variableName="isValidOrder"><![CDATA[%dw 2.0
+output application/java
+var total = sum(payload.orderItems map ($.quantity * $.unitPrice))
+---
+total >= 100]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
 		
@@ -133,17 +137,8 @@ vars.originalRequest.customer]]></ee:set-payload>
 					</otherwise>
 				</choice>
 				
-				<!-- Business Logic: Calculate Order Total -->
-				<ee:transform doc:name="Calculate Order Total">
-					<ee:variables>
-						<ee:set-variable variableName="orderTotal"><![CDATA[%dw 2.0
-output application/java
----
-sum(vars.originalRequest.orderItems map ($.quantity * $.unitPrice))]]></ee:set-variable>
-					</ee:variables>
-				</ee:transform>
-				
-				<logger level="INFO" message="#['Order total calculated: ' ++ vars.orderTotal as String]" />
+				<!-- orderTotal already calculated in validation step -->
+				<logger level="INFO" message="#['Order total: ' ++ vars.orderTotal as String]" />
 				
 				<!-- Call System API to create Order in Salesforce -->
 				<ee:transform doc:name="Prepare Order for System API">
@@ -218,7 +213,7 @@ output application/json
 				</ee:transform>
 			</when>
 			<otherwise>
-				<!-- Invalid Order -->
+				<!-- Invalid Order - Minimum order value not met -->
 				<ee:transform doc:name="Validation Error">
 					<ee:message>
 						<ee:set-payload><![CDATA[%dw 2.0
@@ -226,7 +221,8 @@ output application/json
 ---
 {
 	"success": false,
-	"error": "Invalid order data. Customer and order items are required.",
+	"error": "Order validation failed: Minimum order value is 100",
+	"orderTotal": vars.orderTotal,
 	"correlationId": vars.correlationId
 }]]></ee:set-payload>
 					</ee:message>

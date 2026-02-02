@@ -4,10 +4,12 @@
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+		http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
 
 	<!-- ========================================= -->
 	<!-- EXPERIENCE API: MOBILE CHANNEL -->
@@ -20,13 +22,17 @@
 		<http:listener-connection host="${http.experience.mobile.host}" port="${http.experience.mobile.port}" protocol="HTTP" />
 	</http:listener-config>
 	
-	<!-- Experience API: Mobile - Create Order (Optimized for Mobile) -->
-	<flow name="experience-api-mobile-create-order-flow" doc:name="Experience API - Mobile Create Order">
+	<!-- APIKit Router for RAML Validation -->
+	<apikit:config name="Experience_Mobile_APIKit_Config" api="api/mobile-experience-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+	
+	<!-- ========================================= -->
+	<!-- MAIN FLOW: HTTP Listener + APIKit Router -->
+	<!-- ========================================= -->
+	<flow name="experience-api-mobile-main-flow" doc:name="Experience API - Mobile Main">
 		<http:listener 
 			config-ref="Experience_Mobile_HTTP_Listener_config" 
-			path="/orders" 
-			allowedMethods="POST"
-			doc:name="POST /orders">
+			path="/api/*" 
+			doc:name="HTTP Listener">
 			<http:response statusCode="#[vars.httpStatus default 200]">
 				<http:headers><![CDATA[#[output application/java
 ---
@@ -34,13 +40,167 @@
 	"Content-Type" : "application/json"
 }]]]></http:headers>
 			</http:response>
+			<http:error-response statusCode="#[vars.httpStatus default 500]">
+				<http:body><![CDATA[#[payload]]]></http:body>
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:error-response>
 		</http:listener>
 		
+		<!-- APIKit Router - Routes to implementation flows -->
+		<apikit:router config-ref="Experience_Mobile_APIKit_Config" doc:name="APIKit Router" />
+		
+		<!-- Error Handler: Catch APIKit validation errors -->
+		<error-handler>
+			<on-error-propagate type="APIKIT:BAD_REQUEST" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (400)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 400,
+		"type": "BAD_REQUEST",
+		"message": "Validation failed"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="APIKIT:NOT_FOUND" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (404)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 404,
+		"type": "NOT_FOUND",
+		"message": "Resource not found"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[404]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (405)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 405,
+		"type": "METHOD_NOT_ALLOWED",
+		"message": "Method not allowed"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[405]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="APIKIT:NOT_ACCEPTABLE" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (406)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 406,
+		"type": "NOT_ACCEPTABLE",
+		"message": "Not acceptable"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[406]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (415)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 415,
+		"type": "UNSUPPORTED_MEDIA_TYPE",
+		"message": "Unsupported media type"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[415]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="HTTP:BAD_REQUEST" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform Process API Error (400)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 400,
+		"type": "BAD_REQUEST",
+		"message": "Business validation failed"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate type="ANY" enableNotifications="true" logException="true">
+				<ee:transform doc:name="Transform to JSON Error (500)">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": {
+		"code": 500,
+		"type": "INTERNAL_SERVER_ERROR",
+		"message": "An unexpected error occurred"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	
+	<!-- ========================================= -->
+	<!-- IMPLEMENTATION FLOW: POST /orders -->
+	<!-- APIKit naming convention -->
+	<!-- ========================================= -->
+	<flow name="post:\orders:Experience_Mobile_APIKit_Config" doc:name="POST /orders Implementation">
 		<set-variable 
 			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
 			variableName="correlationId" 
 			doc:name="Set Correlation ID" />
-				<logger level="INFO" message="#['[EXPERIENCE-MOBILE] Creating order - CorrelationId: ' ++ vars.correlationId]" />
+		<logger level="INFO" message="#['[EXPERIENCE-MOBILE] Creating order - CorrelationId: ' ++ vars.correlationId]" />
 		
 		<!-- Transform to Process API format -->
 		<ee:transform doc:name="Transform to Process API">
@@ -76,18 +236,16 @@ output application/json
 output application/json
 ---
 {
-	"id": payload.customerId,
+	"id": payload.orderId,
 	"status": "OK",
 	"total": payload.orderData.totalAmount,
-	"eta": payload.orderData.orderDate + |P7D| as String {format: "yyyy-MM-dd"}
+	"eta": (now() + |P7D|) as String {format: "yyyy-MM-dd"}
 }]]></ee:set-payload>
 			</ee:message>
 			<ee:variables>
 				<ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
-		
-		<error-handler ref="global-error-handler" />
 	</flow>
 
 </mule>

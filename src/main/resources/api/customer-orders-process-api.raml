@@ -17,16 +17,19 @@ types:
     properties:
       productName:
         type: string
+        required: true
         description: Product name
         example: "Laptop"
       quantity:
         type: integer
         minimum: 1
+        required: true
         description: Quantity ordered
         example: 2
       unitPrice:
         type: number
         minimum: 0
+        required: true
         description: Unit price
         example: 1200.00
 
@@ -35,6 +38,7 @@ types:
     properties:
       customerName:
         type: string
+        required: true
         description: Customer name
         example: "ACME Corporation"
       phone:
@@ -47,11 +51,14 @@ types:
     properties:
       customer:
         type: CustomerInfo
+        required: true
         description: Customer information
       items:
         type: OrderItem[]
         minItems: 1
-        description: Order items
+        maxItems: 1
+        required: true
+        description: Order items (only 1 product allowed per order)
 
   OrderResponse:
     type: object
