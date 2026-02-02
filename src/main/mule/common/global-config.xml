@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- ========================================= -->
+	<!-- GLOBAL CONFIGURATIONS -->
+	<!-- ========================================= -->
+	
+	<!-- Configuration Properties -->
+	<configuration-properties file="config.yaml" doc:name="Configuration properties" />
+	
+	<!-- Global Error Handler with Detailed Error Handling -->
+	<error-handler name="global-error-handler" doc:name="Global Error Handler">
+		
+		<!-- Handle Validation Errors (400 Bad Request) -->
+		<on-error-continue type="EXPRESSION, MULE:EXPRESSION" enableNotifications="true" logException="true">
+			<ee:transform doc:name="400 Bad Request">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "BAD_REQUEST",
+	"errorMessage": "Invalid request: " ++ (error.description default "Validation failed"),
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="WARN" message="#['[ERROR-400] Validation error: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-continue>
+		
+		<!-- Handle Not Found Errors (404) -->
+		<on-error-continue type="HTTP:NOT_FOUND, APIKIT:NOT_FOUND" enableNotifications="true" logException="true">
+			<ee:transform doc:name="404 Not Found">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "NOT_FOUND",
+	"errorMessage": "Resource not found: " ++ (error.description default "The requested resource does not exist"),
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[404]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="WARN" message="#['[ERROR-404] Resource not found: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-continue>
+		
+		<!-- Handle Bad Gateway / Connectivity Errors (502/503) -->
+		<on-error-continue type="HTTP:CONNECTIVITY, HTTP:TIMEOUT, HTTP:SERVICE_UNAVAILABLE, HTTP:BAD_GATEWAY" enableNotifications="true" logException="true">
+			<ee:transform doc:name="503 Service Unavailable">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "SERVICE_UNAVAILABLE",
+	"errorMessage": "External service is temporarily unavailable: " ++ (error.description default "Please try again later"),
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[503]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="ERROR" message="#['[ERROR-503] Service unavailable: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-continue>
+		
+		<!-- Handle Unauthorized Errors (401) -->
+		<on-error-continue type="HTTP:UNAUTHORIZED" enableNotifications="true" logException="true">
+			<ee:transform doc:name="401 Unauthorized">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "UNAUTHORIZED",
+	"errorMessage": "Authentication failed: " ++ (error.description default "Invalid or missing credentials"),
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[401]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="ERROR" message="#['[ERROR-401] Unauthorized: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-continue>
+		
+		<!-- Handle Client Errors (400-499) -->
+		<on-error-continue type="HTTP:BAD_REQUEST, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:UNSUPPORTED_MEDIA_TYPE" enableNotifications="true" logException="true">
+			<ee:transform doc:name="4xx Client Error">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "CLIENT_ERROR",
+	"errorMessage": error.description default "Invalid client request",
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="WARN" message="#['[ERROR-4XX] Client error: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-continue>
+		
+		<!-- Handle Server Errors (500+) - Fallback for all other errors -->
+		<on-error-propagate type="ANY" enableNotifications="true" logException="true">
+			<ee:transform doc:name="500 Internal Server Error">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"correlationId": vars.correlationId default uuid(),
+	"timestamp": now(),
+	"errorCode": "INTERNAL_SERVER_ERROR",
+	"errorMessage": "An unexpected error occurred: " ++ (error.description default "Please contact support"),
+	"errorType": error.errorType.identifier
+}]]></ee:set-payload>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<logger level="ERROR" message="#['[ERROR-500] Internal server error: ' ++ error.description ++ ' | CorrelationId: ' ++ (vars.correlationId default '')]" />
+		</on-error-propagate>
+		
+	</error-handler>
+
+</mule>

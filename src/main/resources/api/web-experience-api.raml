@@ -1,0 +1,170 @@
+#%RAML 1.0
+title: Web Experience API
+version: v1
+baseUri: http://localhost:8084
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      Experience API optimized for web browsers.
+      Provides detailed, human-readable responses with complete order summaries.
+      Calls Process API for order orchestration.
+      
+      Target Audience: Web application users via desktop/laptop browsers
+
+types:
+  OrderItem:
+    type: object
+    properties:
+      productName:
+        type: string
+        description: Product name
+        example: "Laptop"
+      quantity:
+        type: integer
+        minimum: 1
+        description: Quantity ordered
+        example: 2
+      unitPrice:
+        type: number
+        minimum: 0
+        description: Unit price
+        example: 1200.00
+
+  CustomerInfo:
+    type: object
+    properties:
+      customerName:
+        type: string
+        description: Customer name
+        example: "ACME Corporation"
+      phone:
+        type: string
+        description: Customer phone
+        example: "555-1234"
+
+  WebOrderRequest:
+    type: object
+    properties:
+      customer:
+        type: CustomerInfo
+        description: Customer information
+      items:
+        type: OrderItem[]
+        minItems: 1
+        description: Order items
+
+  OrderSummary:
+    type: object
+    properties:
+      customerId:
+        type: string
+        description: Customer Salesforce ID
+        example: "001XXXXXXXXXX"
+      totalAmount:
+        type: number
+        description: Total order amount
+        example: 2400.00
+      orderDate:
+        type: string
+        description: Order date
+        example: "2026-02-02T12:00:00Z"
+      estimatedDelivery:
+        type: string
+        description: Estimated delivery date (7 days from order)
+        example: "2026-02-09T12:00:00Z"
+
+  WebOrderResponse:
+    type: object
+    properties:
+      orderId:
+        type: string
+        description: Generated order ID
+        example: "001XXXXXXXXXX-20260202120000"
+      status:
+        type: string
+        enum: [success, failed]
+        description: Order status
+        example: "success"
+      message:
+        type: string
+        description: User-friendly message
+        example: "Your order has been placed successfully"
+      orderSummary:
+        type: OrderSummary
+        description: Detailed order summary
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/orders:
+  post:
+    displayName: Create Web Order
+    description: |
+      Creates a new order via web channel.
+      Returns detailed order summary with estimated delivery date.
+      
+      Flow:
+      1. Experience API receives request
+      2. Calls Process API for order orchestration
+      3. Process API calls System API for Salesforce operations
+      4. Returns web-friendly response with complete details
+    body:
+      application/json:
+        type: WebOrderRequest
+        example: |
+          {
+            "customer": {
+              "customerName": "ACME Corporation",
+              "phone": "555-1234"
+            },
+            "items": [
+              {
+                "productName": "Laptop",
+                "quantity": 2,
+                "unitPrice": 1200.00
+              }
+            ]
+          }
+    responses:
+      201:
+        description: Order created successfully
+        body:
+          application/json:
+            type: WebOrderResponse
+            example: |
+              {
+                "orderId": "001XXXXXXXXXX-20260202120000",
+                "status": "success",
+                "message": "Your order has been placed successfully",
+                "orderSummary": {
+                  "customerId": "001XXXXXXXXXX",
+                  "totalAmount": 2400.00,
+                  "orderDate": "2026-02-02T12:00:00Z",
+                  "estimatedDelivery": "2026-02-09T12:00:00Z"
+                }
+              }
+      400:
+        description: Invalid order request
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse

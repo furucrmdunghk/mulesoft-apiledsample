@@ -1,0 +1,154 @@
+#%RAML 1.0
+title: Mobile Experience API
+version: v1
+baseUri: http://localhost:8085
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      Experience API optimized for mobile applications.
+      Provides compact, minimal payloads optimized for mobile bandwidth (~60% smaller than web).
+      Uses abbreviated field names and essential data only.
+      Calls Process API for order orchestration.
+      
+      Target Audience: Mobile app users (iOS/Android)
+
+types:
+  OrderItem:
+    type: object
+    properties:
+      productName:
+        type: string
+        description: Product name
+        example: "iPhone"
+      quantity:
+        type: integer
+        minimum: 1
+        description: Quantity ordered
+        example: 1
+      unitPrice:
+        type: number
+        minimum: 0
+        description: Unit price
+        example: 999.00
+
+  CustomerInfo:
+    type: object
+    properties:
+      customerName:
+        type: string
+        description: Customer name
+        example: "Mobile User"
+      phone:
+        type: string
+        description: Customer phone
+        example: "555-9999"
+
+  MobileOrderRequest:
+    type: object
+    properties:
+      customer:
+        type: CustomerInfo
+        description: Customer information
+      items:
+        type: OrderItem[]
+        minItems: 1
+        description: Order items
+
+  MobileOrderResponse:
+    type: object
+    description: Compact response optimized for mobile bandwidth
+    properties:
+      id:
+        type: string
+        description: Order ID (abbreviated from orderId)
+        example: "001XXXXXXXXXX-20260202120000"
+      status:
+        type: string
+        enum: [OK, FAIL]
+        description: Order status (abbreviated)
+        example: "OK"
+      total:
+        type: number
+        description: Total amount (abbreviated from orderTotal)
+        example: 999.00
+      eta:
+        type: string
+        description: Estimated delivery date in compact format (yyyy-MM-dd)
+        example: "2026-02-09"
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/orders:
+  post:
+    displayName: Create Mobile Order
+    description: |
+      Creates a new order via mobile channel.
+      Returns minimal payload optimized for mobile bandwidth.
+      
+      Mobile Optimizations:
+      - Compact field names (id, status, total, eta)
+      - Reduced payload size (~60% smaller than web)
+      - Essential data only
+      - Date format: yyyy-MM-dd (instead of ISO 8601)
+      
+      Flow:
+      1. Mobile Experience API receives request
+      2. Calls Process API for order orchestration
+      3. Process API calls System API for Salesforce operations
+      4. Returns compact mobile-optimized response
+    body:
+      application/json:
+        type: MobileOrderRequest
+        example: |
+          {
+            "customer": {
+              "customerName": "Mobile User",
+              "phone": "555-9999"
+            },
+            "items": [
+              {
+                "productName": "iPhone",
+                "quantity": 1,
+                "unitPrice": 999.00
+              }
+            ]
+          }
+    responses:
+      201:
+        description: Order created successfully
+        body:
+          application/json:
+            type: MobileOrderResponse
+            example: |
+              {
+                "id": "001XXXXXXXXXX-20260202120000",
+                "status": "OK",
+                "total": 999.00,
+                "eta": "2026-02-09"
+              }
+      400:
+        description: Invalid order request
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse

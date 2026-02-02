@@ -1,0 +1,242 @@
+#%RAML 1.0
+title: Customer Service Experience API
+version: v1
+baseUri: http://localhost:8086
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      Experience API optimized for Customer Service representatives.
+      Provides advanced workflows combining multiple operations.
+      Includes customer lookup and complete order processing with fulfillment.
+      
+      Target Audience: Customer Service team using internal tools
+
+types:
+  CustomerDetails:
+    type: object
+    properties:
+      customerId:
+        type: string
+        example: "001XXXXXXXXXX"
+      customerName:
+        type: string
+        example: "ACME Corporation"
+      phone:
+        type: string
+        example: "555-1234"
+      contacts:
+        type: ContactInfo[]
+        description: Customer contacts
+
+  ContactInfo:
+    type: object
+    properties:
+      contactId:
+        type: string
+        example: "003XXXXXXXXXX"
+      firstName:
+        type: string
+        example: "John"
+      lastName:
+        type: string
+        example: "Doe"
+      email:
+        type: string
+        example: "john.doe@acme.com"
+
+  OrderItem:
+    type: object
+    properties:
+      productName:
+        type: string
+        example: "Laptop"
+      quantity:
+        type: integer
+        minimum: 1
+        example: 2
+      unitPrice:
+        type: number
+        minimum: 0
+        example: 1200.00
+
+  CustomerInfo:
+    type: object
+    properties:
+      customerName:
+        type: string
+        example: "ACME Corporation"
+      phone:
+        type: string
+        example: "555-1234"
+
+  OrderWithFulfillmentRequest:
+    type: object
+    properties:
+      customer:
+        type: CustomerInfo
+        description: Customer information
+      items:
+        type: OrderItem[]
+        minItems: 1
+        description: Order items
+
+  OrderWithFulfillmentResponse:
+    type: object
+    properties:
+      orderId:
+        type: string
+        description: Generated order ID
+        example: "001XXXXXXXXXX-20260202120000"
+      customerId:
+        type: string
+        description: Customer Salesforce ID
+        example: "001XXXXXXXXXX"
+      orderTotal:
+        type: number
+        description: Total order amount
+        example: 2400.00
+      orderStatus:
+        type: string
+        description: Order status
+        example: "CONFIRMED"
+      fulfillment:
+        type: FulfillmentInfo
+        description: Fulfillment details
+
+  FulfillmentInfo:
+    type: object
+    properties:
+      fulfillmentId:
+        type: string
+        example: "001XXXXXXXXXX-20260202120000-FULFILL"
+      trackingNumber:
+        type: string
+        example: "TRACK-20260202120000"
+      estimatedDelivery:
+        type: string
+        example: "2026-02-09T12:00:00Z"
+      warehouseStatus:
+        type: string
+        example: "READY_TO_SHIP"
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/customer/{customerId}:
+  uriParameters:
+    customerId:
+      type: string
+      description: Salesforce Account ID
+      example: "001XXXXXXXXXX"
+  
+  get:
+    displayName: Get Customer for CS Rep
+    description: |
+      Retrieves complete customer information for Customer Service representatives.
+      Includes customer details and all associated contacts.
+      
+      Calls System API directly for customer data.
+    responses:
+      200:
+        description: Customer found
+        body:
+          application/json:
+            type: CustomerDetails
+            example: |
+              {
+                "customerId": "001XXXXXXXXXX",
+                "customerName": "ACME Corporation",
+                "phone": "555-1234",
+                "contacts": [
+                  {
+                    "contactId": "003XXXXXXXXXX",
+                    "firstName": "John",
+                    "lastName": "Doe",
+                    "email": "john.doe@acme.com"
+                  }
+                ]
+              }
+      404:
+        description: Customer not found
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse
+
+/process-order:
+  post:
+    displayName: Process Order with Fulfillment
+    description: |
+      Advanced CS workflow: Creates order and initiates fulfillment in one call.
+      
+      Flow:
+      1. Calls Customer Orders Process API to create order
+      2. Calls Order Fulfillment Process API to initiate fulfillment
+      3. Returns combined response with order and fulfillment details
+      
+      This endpoint orchestrates two Process APIs for complete order-to-fulfillment workflow.
+    body:
+      application/json:
+        type: OrderWithFulfillmentRequest
+        example: |
+          {
+            "customer": {
+              "customerName": "ACME Corporation",
+              "phone": "555-1234"
+            },
+            "items": [
+              {
+                "productName": "Laptop",
+                "quantity": 2,
+                "unitPrice": 1200.00
+              }
+            ]
+          }
+    responses:
+      201:
+        description: Order and fulfillment created successfully
+        body:
+          application/json:
+            type: OrderWithFulfillmentResponse
+            example: |
+              {
+                "orderId": "001XXXXXXXXXX-20260202120000",
+                "customerId": "001XXXXXXXXXX",
+                "orderTotal": 2400.00,
+                "orderStatus": "CONFIRMED",
+                "fulfillment": {
+                  "fulfillmentId": "001XXXXXXXXXX-20260202120000-FULFILL",
+                  "trackingNumber": "TRACK-20260202120000",
+                  "estimatedDelivery": "2026-02-09T12:00:00Z",
+                  "warehouseStatus": "READY_TO_SHIP"
+                }
+              }
+      400:
+        description: Invalid order request
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse

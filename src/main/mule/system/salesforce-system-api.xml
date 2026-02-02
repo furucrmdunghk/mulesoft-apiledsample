@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- ========================================= -->
+	<!-- SYSTEM API: SALESFORCE CUSTOMER -->
+	<!-- Layer 3 - Bottom Layer -->
+	<!-- Purpose: Direct integration with Salesforce -->
+	<!-- ========================================= -->
+	
+	<!-- System API Listener Configuration -->
+	<http:listener-config name="System_Customer_HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="${http.system.customer.host}" port="${http.system.customer.port}" protocol="HTTP" />
+	</http:listener-config>
+	
+	<!-- System API Request Configuration (for calling from Process APIs) -->
+	<http:request-config name="System_Customer_HTTP_Request_config" doc:name="System API Request config">
+		<http:request-connection host="${http.system.customer.host}" port="${http.system.customer.port}" protocol="HTTP" />
+	</http:request-config>
+	
+	<!-- System API: Create Customer and Contacts via REST API -->
+	<flow name="system-api-create-customer-flow" doc:name="System API - Create Customer">
+		<http:listener 
+			config-ref="System_Customer_HTTP_Listener_config" 
+			path="/customers" 
+			allowedMethods="POST"
+			doc:name="POST /customers">
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:response>
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<logger level="INFO" message="#['[SYSTEM-API] Creating customer via REST API - CorrelationId: ' ++ vars.correlationId]" />
+		
+		<!-- Get OAuth Token -->
+		<flow-ref name="get-salesforce-token-subflow" doc:name="Get OAuth Token" />
+		
+		<!-- Store contacts for later -->
+		<set-variable 
+			value="#[payload.contacts default []]" 
+			variableName="contacts" 
+			doc:name="Store Contacts" />
+		
+		<!-- Prepare Account for Salesforce REST API -->
+		<ee:transform doc:name="Prepare Account JSON">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	Name: payload.customerName,
+	Phone: payload.phone default null,
+	Website: payload.website default null,
+	BillingStreet: payload.billingAddress.street default null,
+	BillingCity: payload.billingAddress.city default null,
+	BillingState: payload.billingAddress.state default null,
+	BillingPostalCode: payload.billingAddress.postalCode default null,
+	BillingCountry: payload.billingAddress.country default null,
+	Type: "Customer"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<!-- Create Account via Salesforce REST API -->
+		<http:request 
+			method="POST" 
+			path="/sobjects/Account"
+			config-ref="Salesforce_REST_API_Config"
+			doc:name="POST Account to Salesforce">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"Authorization": "Bearer " ++ vars.accessToken
+}]]]></http:headers>
+		</http:request>
+		
+		<set-variable 
+			value="#[payload.id]" 
+			variableName="accountId" 
+			doc:name="Store Account ID" />
+		
+		<set-variable 
+			value="#[payload.success]" 
+			variableName="accountSuccess" 
+			doc:name="Store Success Flag" />
+		
+		<logger level="INFO" message="#['Account created with ID: ' ++ vars.accountId]" />
+		
+		<!-- Create Contacts if Account creation was successful -->
+		<choice doc:name="Check if contacts exist">
+			<when expression="#[sizeOf(vars.contacts) &gt; 0 and vars.accountSuccess]">
+				<set-variable 
+					value="#[[]]" 
+					variableName="contactIds" 
+					doc:name="Init Contact IDs Array" />
+				
+				<!-- Loop through contacts and create each one -->
+				<foreach doc:name="For Each Contact" collection="#[vars.contacts]">
+					<ee:transform doc:name="Prepare Contact JSON">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	FirstName: payload.firstName,
+	LastName: payload.lastName,
+	Email: payload.email default null,
+	Phone: payload.phone default null,
+	AccountId: vars.accountId
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					
+					<http:request 
+						method="POST" 
+						path="/sobjects/Contact"
+						config-ref="Salesforce_REST_API_Config"
+						doc:name="POST Contact to Salesforce">
+						<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"Authorization": "Bearer " ++ vars.accessToken
+}]]]></http:headers>
+					</http:request>
+					
+					<set-variable 
+						value="#[vars.contactIds + [payload.id]]" 
+						variableName="contactIds" 
+						doc:name="Collect Contact ID" />
+				</foreach>
+				
+				<logger level="INFO" message="#['Contacts created: ' ++ write(vars.contactIds, 'application/json')]" />
+			</when>
+			<otherwise>
+				<set-variable 
+					value="#[[]]" 
+					variableName="contactIds" 
+					doc:name="Empty Contact IDs" />
+			</otherwise>
+		</choice>
+		
+		<!-- Final Response -->
+		<ee:transform doc:name="Success Response">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": true,
+	"accountId": vars.accountId,
+	"contactIds": vars.contactIds,
+	"message": "Customer and contacts created successfully via REST API",
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+	
+	<!-- System API: Get Customer by ID via REST API -->
+	<flow name="system-api-get-customer-flow" doc:name="System API - Get Customer">
+		<http:listener 
+			config-ref="System_Customer_HTTP_Listener_config" 
+			path="/customers/{customerId}" 
+			allowedMethods="GET"
+			doc:name="GET /customers/{customerId}">
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<set-variable 
+			value="#[attributes.uriParams.customerId]" 
+			variableName="customerId" 
+			doc:name="Set Customer ID" />
+		
+		<logger level="INFO" message="#['[SYSTEM-API] Getting customer via REST API: ' ++ vars.customerId]" />
+		
+		<!-- Get OAuth Token -->
+		<flow-ref name="get-salesforce-token-subflow" doc:name="Get OAuth Token" />
+		
+		<!-- Get Account from Salesforce REST API -->
+		<http:request 
+			method="GET" 
+			path="#['/sobjects/Account/' ++ vars.customerId]"
+			config-ref="Salesforce_REST_API_Config"
+			doc:name="GET Account from Salesforce">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization": "Bearer " ++ vars.accessToken
+}]]]></http:headers>
+		</http:request>
+		
+		<set-variable 
+			value="#[payload]" 
+			variableName="accountData" 
+			doc:name="Store Account Data" />
+		
+		<!-- Query Contacts from Salesforce REST API -->
+		<http:request 
+			method="GET" 
+			path="/query"
+			config-ref="Salesforce_REST_API_Config"
+			doc:name="Query Contacts from Salesforce">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization": "Bearer " ++ vars.accessToken
+}]]]></http:headers>
+			<http:query-params><![CDATA[#[output application/java
+---
+{
+	"q" : "SELECT Id, FirstName, LastName, Email, Phone FROM Contact WHERE AccountId = '" ++ vars.customerId ++ "'"
+}]]]></http:query-params>
+		</http:request>
+		
+		<!-- Build Response -->
+		<ee:transform doc:name="Build Response">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"accountId": vars.accountData.Id,
+	"customerName": vars.accountData.Name,
+	"phone": vars.accountData.Phone,
+	"website": vars.accountData.Website,
+	"billingAddress": {
+		"street": vars.accountData.BillingStreet,
+		"city": vars.accountData.BillingCity,
+		"state": vars.accountData.BillingState,
+		"postalCode": vars.accountData.BillingPostalCode,
+		"country": vars.accountData.BillingCountry
+	},
+	"contacts": payload.records map {
+		"contactId": $.Id,
+		"firstName": $.FirstName,
+		"lastName": $.LastName,
+		"email": $.Email,
+		"phone": $.Phone
+	},
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+
+</mule>

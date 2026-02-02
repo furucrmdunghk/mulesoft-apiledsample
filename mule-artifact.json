@@ -1,4 +1,17 @@
 {
     "minMuleVersion": "4.10.0",
-    "javaSpecificationVersions": ["17"]
+    "javaSpecificationVersions": ["17"],
+    "secureProperties": [],
+    "redeploymentEnabled": true,
+    "name": "mulesoft-apiledsample",
+    "classLoaderModelLoaderDescriptor": {
+        "id": "mule",
+        "attributes": {
+            "exportedResources": []
+        }
+    },
+    "bundleDescriptorLoader": {
+        "id": "mule",
+        "attributes": {}
+    }
 }

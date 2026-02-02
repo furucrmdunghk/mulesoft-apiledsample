@@ -1,0 +1,140 @@
+#%RAML 1.0
+title: Order Fulfillment Process API
+version: v1
+baseUri: http://localhost:8083
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      Process API for order fulfillment workflow.
+      Handles fulfillment preparation, tracking number generation, warehouse coordination.
+      Calls System API to retrieve customer details.
+
+types:
+  FulfillmentRequest:
+    type: object
+    properties:
+      orderId:
+        type: string
+        description: Order ID to fulfill
+        example: "001XXXXXXXXXX-20260202120000"
+      customerId:
+        type: string
+        description: Customer Salesforce ID
+        example: "001XXXXXXXXXX"
+      orderTotal:
+        type: number
+        minimum: 0
+        description: Total order amount
+        example: 2400.00
+
+  FulfillmentResponse:
+    type: object
+    properties:
+      fulfillmentId:
+        type: string
+        description: Generated fulfillment ID (customerId-timestamp-FULFILL)
+        example: "001XXXXXXXXXX-20260202120000-FULFILL"
+      orderId:
+        type: string
+        description: Original order ID
+        example: "001XXXXXXXXXX-20260202120000"
+      trackingNumber:
+        type: string
+        description: Shipping tracking number
+        example: "TRACK-20260202120000"
+      estimatedDelivery:
+        type: string
+        description: Estimated delivery date (7 days from now)
+        example: "2026-02-09T12:00:00Z"
+      warehouseStatus:
+        type: string
+        description: Warehouse processing status
+        example: "READY_TO_SHIP"
+      customerDetails:
+        type: CustomerDetails
+        description: Customer information from Salesforce
+
+  CustomerDetails:
+    type: object
+    properties:
+      customerId:
+        type: string
+        example: "001XXXXXXXXXX"
+      customerName:
+        type: string
+        example: "ACME Corporation"
+      phone:
+        type: string
+        example: "555-1234"
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/fulfillment:
+  post:
+    displayName: Initiate Order Fulfillment
+    description: |
+      Initiates order fulfillment process:
+      1. Validates fulfillment request
+      2. Retrieves customer details from Salesforce via System API
+      3. Generates tracking number
+      4. Calculates estimated delivery date (7 days)
+      5. Returns fulfillment confirmation
+    body:
+      application/json:
+        type: FulfillmentRequest
+        example: |
+          {
+            "orderId": "001XXXXXXXXXX-20260202120000",
+            "customerId": "001XXXXXXXXXX",
+            "orderTotal": 2400.00
+          }
+    responses:
+      201:
+        description: Fulfillment initiated successfully
+        body:
+          application/json:
+            type: FulfillmentResponse
+            example: |
+              {
+                "fulfillmentId": "001XXXXXXXXXX-20260202120000-FULFILL",
+                "orderId": "001XXXXXXXXXX-20260202120000",
+                "trackingNumber": "TRACK-20260202120000",
+                "estimatedDelivery": "2026-02-09T12:00:00Z",
+                "warehouseStatus": "READY_TO_SHIP",
+                "customerDetails": {
+                  "customerId": "001XXXXXXXXXX",
+                  "customerName": "ACME Corporation",
+                  "phone": "555-1234"
+                }
+              }
+      400:
+        description: Invalid fulfillment request
+        body:
+          application/json:
+            type: ErrorResponse
+      404:
+        description: Customer not found
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse

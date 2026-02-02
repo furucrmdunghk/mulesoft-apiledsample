@@ -1,0 +1,202 @@
+#%RAML 1.0
+title: Salesforce System API
+version: v1
+baseUri: http://localhost:8081
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      System API for direct Salesforce integration.
+      Provides CRUD operations for Salesforce objects (Account, Contact).
+      Uses OAuth 2.0 Client Credentials flow for authentication.
+
+types:
+  Customer:
+    type: object
+    properties:
+      customerName:
+        type: string
+        description: Account name in Salesforce
+        example: "ACME Corporation"
+      phone:
+        type: string
+        description: Customer phone number
+        example: "555-1234"
+      contacts:
+        type: Contact[]
+        required: false
+        description: List of contacts for this customer
+
+  Contact:
+    type: object
+    properties:
+      firstName:
+        type: string
+        description: Contact first name
+        example: "John"
+      lastName:
+        type: string
+        description: Contact last name
+        example: "Doe"
+      email:
+        type: string
+        description: Contact email address
+        example: "john.doe@acme.com"
+
+  CustomerResponse:
+    type: object
+    properties:
+      customerId:
+        type: string
+        description: Salesforce Account ID
+        example: "001XXXXXXXXXX"
+      customerName:
+        type: string
+        description: Account name
+        example: "ACME Corporation"
+      phone:
+        type: string
+        description: Customer phone number
+        example: "555-1234"
+      contacts:
+        type: ContactResponse[]
+        description: List of contacts
+
+  ContactResponse:
+    type: object
+    properties:
+      contactId:
+        type: string
+        description: Salesforce Contact ID
+        example: "003XXXXXXXXXX"
+      firstName:
+        type: string
+        example: "John"
+      lastName:
+        type: string
+        example: "Doe"
+      email:
+        type: string
+        example: "john.doe@acme.com"
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/customers:
+  post:
+    displayName: Create Customer
+    description: |
+      Creates a new Account in Salesforce with optional Contacts.
+      Returns the created Account ID and Contact IDs.
+    body:
+      application/json:
+        type: Customer
+        example: |
+          {
+            "customerName": "ACME Corporation",
+            "phone": "555-1234",
+            "contacts": [
+              {
+                "firstName": "John",
+                "lastName": "Doe",
+                "email": "john.doe@acme.com"
+              },
+              {
+                "firstName": "Jane",
+                "lastName": "Smith",
+                "email": "jane.smith@acme.com"
+              }
+            ]
+          }
+    responses:
+      201:
+        description: Customer created successfully
+        body:
+          application/json:
+            type: CustomerResponse
+            example: |
+              {
+                "customerId": "001XXXXXXXXXX",
+                "customerName": "ACME Corporation",
+                "phone": "555-1234",
+                "contacts": [
+                  {
+                    "contactId": "003XXXXXXXXXX",
+                    "firstName": "John",
+                    "lastName": "Doe",
+                    "email": "john.doe@acme.com"
+                  },
+                  {
+                    "contactId": "003YYYYYYYYYY",
+                    "firstName": "Jane",
+                    "lastName": "Smith",
+                    "email": "jane.smith@acme.com"
+                  }
+                ]
+              }
+      400:
+        description: Invalid request
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse
+
+  /{customerId}:
+    uriParameters:
+      customerId:
+        type: string
+        description: Salesforce Account ID
+        example: "001XXXXXXXXXX"
+    
+    get:
+      displayName: Get Customer
+      description: |
+        Retrieves an Account and its Contacts from Salesforce by Account ID.
+      responses:
+        200:
+          description: Customer found
+          body:
+            application/json:
+              type: CustomerResponse
+              example: |
+                {
+                  "customerId": "001XXXXXXXXXX",
+                  "customerName": "ACME Corporation",
+                  "phone": "555-1234",
+                  "contacts": [
+                    {
+                      "contactId": "003XXXXXXXXXX",
+                      "firstName": "John",
+                      "lastName": "Doe",
+                      "email": "john.doe@acme.com"
+                    }
+                  ]
+                }
+        404:
+          description: Customer not found
+          body:
+            application/json:
+              type: ErrorResponse
+        500:
+          description: Internal server error
+          body:
+            application/json:
+              type: ErrorResponse

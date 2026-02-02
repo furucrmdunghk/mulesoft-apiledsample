@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- ========================================= -->
+	<!-- PROCESS API: CUSTOMER ORDERS -->
+	<!-- Layer 2 - Middle Layer -->
+	<!-- Purpose: Orchestrate customer order business logic -->
+	<!-- ========================================= -->
+	
+	<!-- Process API: Customer Orders Listener Configuration -->
+	<http:listener-config name="Process_CustomerOrders_HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="${http.process.customerOrders.host}" port="${http.process.customerOrders.port}" protocol="HTTP" />
+	</http:listener-config>
+	
+	<!-- Process API: Customer Orders Request Configuration (for calling from Experience APIs) -->
+	<http:request-config name="Process_CustomerOrders_HTTP_Request_config" doc:name="Process API Request config">
+		<http:request-connection host="${http.process.customerOrders.host}" port="${http.process.customerOrders.port}" protocol="HTTP" />
+	</http:request-config>
+	
+	<!-- Process API: Customer Orders Orchestration -->
+	<flow name="process-api-customer-orders-flow" doc:name="Process API - Customer Orders">
+		<http:listener 
+			config-ref="Process_CustomerOrders_HTTP_Listener_config" 
+			path="/customer-orders" 
+			allowedMethods="POST"
+			doc:name="POST /customer-orders">
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:response>
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<logger level="INFO" message="#['[PROCESS-API] Processing customer order - CorrelationId: ' ++ vars.correlationId]" />
+		
+		<!-- Store original payload -->
+		<set-variable 
+			value="#[payload]" 
+			variableName="originalRequest" 
+			doc:name="Store Original Request" />
+		
+		<!-- Business Logic: Validate Order -->
+		<ee:transform doc:name="Validate Order">
+			<ee:variables>
+				<ee:set-variable variableName="isValidOrder"><![CDATA[%dw 2.0
+output application/java
+---
+payload.customer != null and 
+payload.orderItems != null and 
+sizeOf(payload.orderItems) > 0]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		
+		<choice doc:name="Is Order Valid?">
+			<when expression="#[vars.isValidOrder]">
+				<!-- Call System API to create/get customer -->
+				<choice doc:name="Customer Exists?">
+					<when expression="#[vars.originalRequest.customer.customerId != null]">
+						<!-- Get existing customer -->
+						<http:request 
+							method="GET" 
+							path="#['/customers/' ++ vars.originalRequest.customer.customerId]"
+							config-ref="System_Customer_HTTP_Request_config"
+							doc:name="Get Customer">
+							<http:headers><![CDATA[#[output application/java
+---
+{
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+						</http:request>
+						
+						<set-variable 
+							value="#[payload.accountId]" 
+							variableName="customerId" 
+							doc:name="Set Customer ID" />
+					</when>
+					<otherwise>
+						<!-- Create new customer -->
+						<ee:transform doc:name="Prepare Customer Data">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.originalRequest.customer]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						
+						<http:request 
+							method="POST" 
+							path="/customers"
+							config-ref="System_Customer_HTTP_Request_config"
+							doc:name="Create Customer">
+							<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+						</http:request>
+						
+						<set-variable 
+							value="#[payload.accountId]" 
+							variableName="customerId" 
+							doc:name="Set Customer ID" />
+					</otherwise>
+				</choice>
+				
+				<!-- Business Logic: Calculate Order Total -->
+				<ee:transform doc:name="Calculate Order Total">
+					<ee:variables>
+						<ee:set-variable variableName="orderTotal"><![CDATA[%dw 2.0
+output application/java
+---
+sum(vars.originalRequest.orderItems map ($.quantity * $.unitPrice))]]></ee:set-variable>
+						<ee:set-variable variableName="orderData"><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"customerId": vars.customerId,
+	"orderDate": now(),
+	"totalAmount": vars.orderTotal,
+	"status": "Pending",
+	"items": vars.originalRequest.orderItems
+}]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				
+				<logger level="INFO" message="#['Order total calculated: ' ++ vars.orderTotal as String]" />
+				
+				<!-- Build Success Response -->
+				<ee:transform doc:name="Success Response">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": true,
+	"customerId": vars.customerId,
+	"orderData": vars.orderData,
+	"message": "Customer order processed successfully",
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</when>
+			<otherwise>
+				<!-- Invalid Order -->
+				<ee:transform doc:name="Validation Error">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": false,
+	"error": "Invalid order data. Customer and order items are required.",
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+
+</mule>

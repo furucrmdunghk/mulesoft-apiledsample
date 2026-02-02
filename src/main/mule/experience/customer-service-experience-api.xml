@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- ========================================= -->
+	<!-- EXPERIENCE API: CUSTOMER SERVICE CHANNEL -->
+	<!-- Layer 1 - Top Layer -->
+	<!-- Purpose: Optimized for customer service representatives -->
+	<!-- ========================================= -->
+	
+	<!-- Experience API: Customer Service Listener Configuration -->
+	<http:listener-config name="Experience_CustomerService_HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="${http.experience.customerService.host}" port="${http.experience.customerService.port}" protocol="HTTP" />
+	</http:listener-config>
+	
+	<!-- Experience API: Customer Service - Get Customer Details -->
+	<flow name="experience-api-customer-service-flow" doc:name="Experience API - Customer Service">
+		<http:listener 
+			config-ref="Experience_CustomerService_HTTP_Listener_config" 
+			path="/customer/{customerId}" 
+			allowedMethods="GET"
+			doc:name="GET /customer/{customerId}">
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<set-variable 
+			value="#[attributes.uriParams.customerId]" 
+			variableName="customerId" 
+			doc:name="Set Customer ID" />
+		
+		<logger level="INFO" message="#['[EXPERIENCE-CS] Getting customer details - CorrelationId: ' ++ vars.correlationId]" />
+		
+		<!-- Call System API to get customer -->
+		<http:request 
+			method="GET" 
+			path="#['/customers/' ++ vars.customerId]"
+			config-ref="System_Customer_HTTP_Request_config"
+			doc:name="Get Customer">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+		</http:request>
+		
+		<!-- Transform for Customer Service format -->
+		<ee:transform doc:name="Transform for CS">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"customerProfile": {
+		"id": payload.accountId,
+		"name": payload.customerName,
+		"contactInfo": {
+			"phone": payload.phone,
+			"website": payload.website,
+			"address": payload.billingAddress
+		},
+		"contacts": payload.contacts map {
+			"id": $.contactId,
+			"name": $.firstName ++ " " ++ $.lastName,
+			"email": $.email,
+			"phone": $.phone
+		}
+	},
+	"metadata": {
+		"retrievedAt": now(),
+		"correlationId": vars.correlationId
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+	
+	<!-- Experience API: Customer Service - Process Order with Fulfillment -->
+	<flow name="experience-api-customer-service-order-flow" doc:name="Experience API - CS Process Order">
+		<http:listener 
+			config-ref="Experience_CustomerService_HTTP_Listener_config" 
+			path="/process-order" 
+			allowedMethods="POST"
+			doc:name="POST /process-order">
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:response>
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<logger level="INFO" message="#['[EXPERIENCE-CS] Processing order with fulfillment - CorrelationId: ' ++ vars.correlationId]" />
+		
+		<set-variable 
+			value="#[payload]" 
+			variableName="originalRequest" 
+			doc:name="Store Original Request" />
+		
+		<!-- Step 1: Call Customer Orders Process API -->
+		<ee:transform doc:name="Prepare Order Request">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	customer: vars.originalRequest.customer,
+	orderItems: vars.originalRequest.items
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<http:request 
+			method="POST" 
+			path="/customer-orders"
+			config-ref="Process_CustomerOrders_HTTP_Request_config"
+			doc:name="Create Order">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+		</http:request>
+		
+		<set-variable 
+			value="#[payload]" 
+			variableName="orderResponse" 
+			doc:name="Store Order Response" />
+		
+		<!-- Step 2: Call Order Fulfillment Process API -->
+		<ee:transform doc:name="Prepare Fulfillment Request">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	customerId: vars.orderResponse.customerId,
+	orderItems: vars.originalRequest.items
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<http:request 
+			method="POST" 
+			path="/fulfillment"
+			config-ref="Process_OrderFulfillment_HTTP_Request_config"
+			doc:name="Create Fulfillment">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+		</http:request>
+		
+		<set-variable 
+			value="#[payload]" 
+			variableName="fulfillmentResponse" 
+			doc:name="Store Fulfillment Response" />
+		
+		<!-- Aggregate Response -->
+		<ee:transform doc:name="Aggregate Response">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": true,
+	"order": {
+		"customerId": vars.orderResponse.customerId,
+		"orderData": vars.orderResponse.orderData,
+		"message": vars.orderResponse.message
+	},
+	"fulfillment": vars.fulfillmentResponse,
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		
+		<logger level="INFO" message="#['Order and fulfillment processed successfully']" />
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+
+</mule>

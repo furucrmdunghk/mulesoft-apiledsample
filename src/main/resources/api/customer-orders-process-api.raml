@@ -1,0 +1,145 @@
+#%RAML 1.0
+title: Customer Orders Process API
+version: v1
+baseUri: http://localhost:8082
+mediaType: application/json
+
+documentation:
+  - title: Overview
+    content: |
+      Process API for customer order orchestration.
+      Handles business logic: order validation, customer management, order total calculation.
+      Calls System API for Salesforce operations.
+
+types:
+  OrderItem:
+    type: object
+    properties:
+      productName:
+        type: string
+        description: Product name
+        example: "Laptop"
+      quantity:
+        type: integer
+        minimum: 1
+        description: Quantity ordered
+        example: 2
+      unitPrice:
+        type: number
+        minimum: 0
+        description: Unit price
+        example: 1200.00
+
+  CustomerInfo:
+    type: object
+    properties:
+      customerName:
+        type: string
+        description: Customer name
+        example: "ACME Corporation"
+      phone:
+        type: string
+        description: Customer phone
+        example: "555-1234"
+
+  OrderRequest:
+    type: object
+    properties:
+      customer:
+        type: CustomerInfo
+        description: Customer information
+      items:
+        type: OrderItem[]
+        minItems: 1
+        description: Order items
+
+  OrderResponse:
+    type: object
+    properties:
+      orderId:
+        type: string
+        description: Generated order ID (customerId-timestamp)
+        example: "001XXXXXXXXXX-20260202120000"
+      customerId:
+        type: string
+        description: Salesforce Account ID
+        example: "001XXXXXXXXXX"
+      orderTotal:
+        type: number
+        description: Total order amount
+        example: 2400.00
+      orderDate:
+        type: string
+        description: Order date in ISO 8601 format
+        example: "2026-02-02T12:00:00Z"
+
+  ErrorResponse:
+    type: object
+    properties:
+      correlationId:
+        type: string
+        description: Unique identifier for tracking this request
+      timestamp:
+        type: string
+        description: Error timestamp
+      errorCode:
+        type: string
+        description: Error code
+      errorMessage:
+        type: string
+        description: Human-readable error message
+
+/customer-orders:
+  post:
+    displayName: Create Customer Order
+    description: |
+      Orchestrates customer order creation process:
+      1. Validates order data
+      2. Creates/retrieves customer from Salesforce via System API
+      3. Calculates order total
+      4. Returns order confirmation
+    body:
+      application/json:
+        type: OrderRequest
+        example: |
+          {
+            "customer": {
+              "customerName": "ACME Corporation",
+              "phone": "555-1234"
+            },
+            "items": [
+              {
+                "productName": "Laptop",
+                "quantity": 2,
+                "unitPrice": 1200.00
+              },
+              {
+                "productName": "Mouse",
+                "quantity": 5,
+                "unitPrice": 25.00
+              }
+            ]
+          }
+    responses:
+      201:
+        description: Order created successfully
+        body:
+          application/json:
+            type: OrderResponse
+            example: |
+              {
+                "orderId": "001XXXXXXXXXX-20260202120000",
+                "customerId": "001XXXXXXXXXX",
+                "orderTotal": 2525.00,
+                "orderDate": "2026-02-02T12:00:00Z"
+              }
+      400:
+        description: Invalid order request
+        body:
+          application/json:
+            type: ErrorResponse
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse
