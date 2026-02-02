@@ -1,55 +1,91 @@
 # API-Led Connectivity Sample - MuleSoft
 
 Dự án mẫu thể hiện kiến trúc **API-Led Connectivity** của MuleSoft với 3 tầng API:
-- **Experience APIs** (Tầng trải nghiệm)
-- **Process APIs** (Tầng xử lý nghiệp vụ)
-- **System APIs** (Tầng hệ thống)
+- **Experience APIs** (Tầng trải nghiệm) - RAML validation, APIKit router
+- **Process APIs** (Tầng xử lý nghiệp vụ) - Business validation
+- **System APIs** (Tầng hệ thống) - Salesforce integration
+
+## ✨ Tính năng chính (Updated Feb 2026)
+
+### 🎯 API Validation Strategy
+- **RAML Validation** ở Experience APIs (Web & Mobile)
+  - Contract validation: required fields, data types, constraints
+  - APIKit router pattern với main flow + implementation flow
+  - Comprehensive error handlers cho validation errors
+  
+- **Business Validation** ở Process API
+  - Cross-field calculations (RAML cannot validate)
+  - Example: Minimum order value $100
+  - Centralized business rules cho tất cả channels
+
+### 🛡️ Error Handling Pattern
+- **Experience APIs**: 
+  - `APIKIT:BAD_REQUEST` - RAML validation failed
+  - `HTTP:BAD_REQUEST` - Downstream API errors (400)
+  - `APIKIT:NOT_FOUND`, `METHOD_NOT_ALLOWED`, `NOT_ACCEPTABLE`, `UNSUPPORTED_MEDIA_TYPE`
+  - `ANY` - Fallback for unexpected errors
+  
+- **Process APIs**: 
+  - Business validation errors với descriptive messages
+  - Propagate errors lên Experience APIs
 
 ## Kiến trúc
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     EXPERIENCE APIs (Layer 1)                    │
-│                                                                   │
-│  ┌──────────┐    ┌──────────┐    ┌───────────────────────┐     │
-│  │   Web    │    │  Mobile  │    │  Customer Service     │     │
-│  │  :8084   │    │  :8085   │    │      :8086            │     │
-│  └──────────┘    └──────────┘    └───────────────────────┘     │
-└────────────────────────┬──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                  EXPERIENCE APIs (Layer 1)                   │
+│              [RAML Validation + APIKit Router]               │
+│                                                               │
+│  ┌──────────────────────┐    ┌──────────────────────┐      │
+│  │   Web Experience     │    │  Mobile Experience   │      │
+│  │      :8084           │    │       :8085          │      │
+│  │ • Full response      │    │ • Minimal payload    │      │
+│  │ • Rich UI data       │    │ • Optimized for 3G   │      │
+│  └──────────────────────┘    └──────────────────────┘      │
+└────────────────────────┬─────────────────────────────────────┘
                          │ REUSE
-┌────────────────────────┴──────────────────────────────────────┐
-│                      PROCESS APIs (Layer 2)                    │
-│                                                                 │
-│  ┌───────────────────────┐    ┌─────────────────────────┐    │
-│  │   Customer Orders     │    │  Order Fulfillment      │    │
-│  │       :8082           │    │       :8083             │    │
-│  └───────────────────────┘    └─────────────────────────┘    │
-└────────────────────────┬──────────────────────────────────────┘
+┌────────────────────────┴─────────────────────────────────────┐
+│                     PROCESS API (Layer 2)                     │
+│                 [Business Validation]                         │
+│                                                               │
+│  ┌───────────────────────────────────────────────────┐      │
+│  │   Customer Orders Process API (:8082)             │      │
+│  │   • Minimum order value validation ($100)         │      │
+│  │   • Customer creation/lookup orchestration        │      │
+│  │   • Order calculation & Salesforce integration    │      │
+│  └───────────────────────────────────────────────────┘      │
+└────────────────────────┬─────────────────────────────────────┘
                          │ REUSE
-┌────────────────────────┴──────────────────────────────────────┐
-│                       SYSTEM APIs (Layer 3)                    │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────┐    │
-│  │   Customer & Contacts API (:8081)                     │    │
-│  │   - POST /customers (Create Account + Contacts)       │    │
-│  │   - GET /customers/{id} (Get Account with Contacts)   │    │
-│  └───────────────────────────────────────────────────────┘    │
-│                           │                                     │
-│                           ▼                                     │
-│                   ┌──────────────┐                             │
-│                   │  Salesforce  │                             │
-│                   └──────────────┘                             │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────┴─────────────────────────────────────┐
+│                      SYSTEM API (Layer 3)                     │
+│                                                               │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │   Customer System API (:8081)                         │  │
+│  │   • POST /customers (Create Account + Contacts)       │  │
+│  │   • GET /customers/{id} (Get Account + Contacts)      │  │
+│  │   • POST /orders (Create Order in Salesforce)         │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                           │                                   │
+│                           ▼                                   │
+│                   ┌──────────────┐                           │
+│                   │  Salesforce  │                           │
+│                   └──────────────┘                           │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## APIs Chi tiết
 
-### 🔷 SYSTEM APIs (Port 8081)
+### 🔷 SYSTEM API (Port 8081)
 
-#### 1. Create Customer and Contacts
-- **Endpoint**: `POST http://localhost:8081/api/system/customer/customers`
-- **Mô tả**: Tạo Account mới và Contacts trong Salesforce
-- **Request Body**:
+#### Customer System API
+Truy cập trực tiếp vào Salesforce để quản lý Accounts, Contacts và Orders.
+
+**1. Create Customer**
+```
+POST http://localhost:8081/customers
+```
+
+**Request Body**:
 ```json
 {
   "customerName": "ACME Corporation",
@@ -73,81 +109,266 @@ Dự án mẫu thể hiện kiến trúc **API-Led Connectivity** của MuleSoft
 }
 ```
 
-#### 2. Get Customer Details
-- **Endpoint**: `GET http://localhost:8081/api/system/customer/customers/{customerId}`
-- **Mô tả**: Lấy thông tin Account và Contacts từ Salesforce
+**2. Get Customer**
+```
+GET http://localhost:8081/customers/{accountId}
+```
+
+**3. Create Order**
+```
+POST http://localhost:8081/orders
+```
 
 ---
 
-### 🔶 PROCESS APIs
+### 🔶 PROCESS API
 
-#### 1. Customer Orders (Port 8082)
-- **Endpoint**: `POST http://localhost:8082/api/process/customer-orders/customer-orders`
-- **Mô tả**: Orchestration layer - xử lý logic nghiệp vụ cho đơn hàng
-- **Chức năng**:
-  - Validate order data
-  - Tạo hoặc lấy customer từ System API
-  - Tính toán tổng tiền đơn hàng
-  - Xử lý business rules
+#### Customer Orders Process API (Port 8082)
+Orchestrates business logic cho order processing.
+
+**Endpoint**: `POST http://localhost:8082/customer-orders`
+
+**Business Rules**:
+- ✅ Minimum order value: $100
+- ✅ Automatic customer creation nếu chưa tồn tại
+- ✅ Order total calculation: sum(quantity × unitPrice)
+- ✅ Salesforce Account & Order creation
 
 **Request Body**:
 ```json
 {
   "customer": {
-    "customerId": "0015g00000XYZ123",
-    "customerName": "ACME Corporation"
+    "customerName": "John Doe",
+    "phone": "+1-555-9999"
   },
   "orderItems": [
     {
-      "productName": "Product A",
-      "quantity": 2,
-      "unitPrice": 100.00
-    },
-    {
-      "productName": "Product B",
+      "productName": "iPhone 15",
       "quantity": 1,
-      "unitPrice": 250.00
+      "unitPrice": 999
     }
   ]
 }
 ```
 
-#### 2. Order Fulfillment (Port 8083)
-- **Endpoint**: `POST http://localhost:8083/api/process/order-fulfillment/fulfillment`
-- **Mô tả**: Xử lý quy trình fulfill order
-- **Chức năng**:
-  - Lấy thông tin customer
-  - Chuẩn bị shipping information
-  - Generate tracking number
-  - Cập nhật trạng thái đơn hàng
+**Response (Success - 201)**:
+```json
+{
+  "success": true,
+  "customerId": "0015j00000AhORwAAN",
+  "orderId": "ORD-123456",
+  "orderData": {
+    "customerId": "0015j00000AhORwAAN",
+    "totalAmount": 999,
+    "status": "NEW",
+    "items": [...]
+  },
+  "message": "Customer order processed successfully",
+  "correlationId": "abc-123-def"
+}
+```
+
+**Response (Validation Failed - 400)**:
+```json
+{
+  "success": false,
+  "error": "Order validation failed: Minimum order value is 100",
+  "orderTotal": 50,
+  "correlationId": "abc-123-def"
+}
+```
 
 ---
 
 ### 🔵 EXPERIENCE APIs
 
-#### 1. Web API (Port 8084)
-- **Endpoint**: `POST http://localhost:8084/api/web/orders`
-- **Mô tả**: API tối ưu cho Customer Website
-- **Format**: Response đầy đủ thông tin, dễ đọc cho Web UI
+#### 1. Web Experience API (Port 8084)
+
+**Đặc điểm**:
+- ✅ RAML validation (required fields, data types, constraints)
+- ✅ APIKit router với comprehensive error handling
+- 🎨 Rich response format với detailed information
+- 🖥️ Optimized cho web browsers (WiFi/LAN)
+
+**Endpoint**: `POST http://localhost:8084/api/orders`
 
 **Request Body**:
 ```json
 {
   "customer": {
-    "customerName": "New Customer",
-    "phone": "+1-555-9999",
-    "contacts": [
-      {
-        "firstName": "Jane",
-        "lastName": "Smith",
-        "email": "jane@example.com"
-      }
-    ]
+    "customerName": "Jane Smith",
+    "phone": "+1-555-8888"
   },
   "items": [
     {
       "productName": "Laptop",
+      "quantity": 2,
+      "unitPrice": 1500
+    }
+  ]
+}
+```
+
+**Response (Success - 201)**:
+```json
+{
+  "orderId": "ORD-123456",
+  "status": "success",
+  "message": "Your order has been placed successfully",
+  "orderSummary": {
+    "orderId": "ORD-123456",
+    "customerId": "0015j00000AhORwAAN",
+    "totalAmount": 3000,
+    "orderDate": "2026-02-02T18:00:00",
+    "estimatedDelivery": "2026-02-09T18:00:00"
+  }
+}
+```
+
+**Response (RAML Validation Failed - 400)**:
+```json
+{
+  "error": {
+    "code": 400,
+    "type": "BAD_REQUEST",
+    "message": "Validation failed",
+    "details": "Invalid request format or missing required fields"
+  }
+}
+```
+
+**Response (Business Validation Failed - 400)**:
+```json
+{
+  "error": {
+    "code": 400,
+    "type": "BAD_REQUEST",
+    "message": "Business validation failed",
+    "details": "Order validation failed: Minimum order value is 100"
+  }
+}
+```
+
+#### 2. Mobile Experience API (Port 8085)
+
+**Đặc điểm**:
+- ✅ RAML validation (same rules as Web)
+- ✅ APIKit router pattern
+- 📱 Minimal payload (~70% smaller than Web)
+- ⚡ Optimized cho mobile networks (3G/4G/5G)
+- 🔋 Battery & bandwidth efficient
+
+**Endpoint**: `POST http://localhost:8085/api/orders`
+
+**Request Body** (same as Web):
+```json
+{
+  "customer": {
+    "customerName": "Mobile User",
+    "phone": "+1-555-7777"
+  },
+  "items": [
+    {
+      "productName": "Headphones",
+      "quantity": 3,
+      "unitPrice": 50
+    }
+  ]
+}
+```
+
+**Response (Success - 201)**:
+```json
+{
+  "id": "ORD-123456",
+  "status": "OK",
+  "total": 150,
+  "eta": "2026-02-09"
+}
+```
+
+**Response (Validation Failed - 400)**:
+```json
+{
+  "error": {
+    "code": 400,
+    "type": "BAD_REQUEST",
+    "message": "Validation failed"
+  }
+}
+```
+
+---
+
+## 🧪 Testing Guide
+
+### Test Scenarios
+
+#### ✅ **Happy Path - Valid Order**
+Request (Web or Mobile):
+```json
+{
+  "customer": {
+    "customerName": "Test User",
+    "phone": "555-1234"
+  },
+  "items": [
+    {
+      "productName": "Product A",
+      "quantity": 2,
+      "unitPrice": 75
+    }
+  ]
+}
+```
+Expected: **201 Created** (Total = $150 >= $100)
+
+---
+
+#### ❌ **RAML Validation Failed**
+
+**Test 1: Missing required field**
+```json
+{
+  "customer": {
+    "phone": "555-1234"
+  },
+  "items": [...]
+}
+```
+Expected: **400 Bad Request** - "Validation failed"
+
+**Test 2: Empty body**
+```json
+{}
+```
+Expected: **400 Bad Request** - "Invalid request format or missing required fields"
+
+---
+
+#### ❌ **Business Validation Failed**
+
+**Test: Order < $100**
+```json
+{
+  "customer": {
+    "customerName": "Test User",
+    "phone": "555-1234"
+  },
+  "items": [
+    {
+      "productName": "Cheap Item",
       "quantity": 1,
+      "unitPrice": 50
+    }
+  ]
+}
+```
+Expected: **400 Bad Request** - "Order validation failed: Minimum order value is 100"
+
+---
+
+## 🚀 Run Project
       "unitPrice": 1500.00
     }
   ]
