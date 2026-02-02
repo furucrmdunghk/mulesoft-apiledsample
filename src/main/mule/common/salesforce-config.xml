@@ -31,9 +31,11 @@
 			<http:body><![CDATA[#[output application/x-www-form-urlencoded
 ---
 {
-	"grant_type": "client_credentials",
+	"grant_type": "password",
 	"client_id": p('salesforce.clientId'),
-	"client_secret": p('salesforce.clientSecret')
+	"client_secret": p('salesforce.clientSecret'),
+	"username": p('salesforce.username'),
+	"password": p('salesforce.password') ++ p('salesforce.securityToken')
 }]]]></http:body>
 			<http:headers><![CDATA[#[output application/java
 ---
@@ -42,12 +44,14 @@
 }]]]></http:headers>
 		</http:request>
 		
+		<logger level="INFO" message="#['OAuth Response: ' ++ write(payload, 'application/json')]" doc:name="Log OAuth Response" />
+		
 		<set-variable 
 			value="#[payload.access_token]" 
 			variableName="accessToken" 
 			doc:name="Store Access Token" />
 		
-		<logger level="DEBUG" message="#['OAuth token obtained successfully']" />
+		<logger level="INFO" message="#['Access Token: ' ++ vars.accessToken]" doc:name="Log Access Token" />
 	</sub-flow>
 
 </mule>

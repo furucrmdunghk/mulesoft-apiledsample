@@ -48,8 +48,19 @@
 		
 		<logger level="INFO" message="#['[SYSTEM-API] Creating customer via REST API - CorrelationId: ' ++ vars.correlationId]" />
 		
+		<!-- Store original customer data before OAuth call -->
+		<set-variable 
+			value="#[payload]" 
+			variableName="customerData" 
+			doc:name="Store Customer Data" />
+		
 		<!-- Get OAuth Token -->
 		<flow-ref name="get-salesforce-token-subflow" doc:name="Get OAuth Token" />
+		
+		<!-- Restore customer data -->
+		<set-payload 
+			value="#[vars.customerData]" 
+			doc:name="Restore Customer Data" />
 		
 		<!-- Store contacts for later -->
 		<set-variable 
@@ -267,6 +278,107 @@ output application/json
 	"correlationId": vars.correlationId
 }]]></ee:set-payload>
 			</ee:message>
+		</ee:transform>
+		
+		<error-handler ref="global-error-handler" />
+	</flow>
+	
+	<!-- System API: Create Order via REST API -->
+	<flow name="system-api-create-order-flow" doc:name="System API - Create Order">
+		<http:listener 
+			config-ref="System_Customer_HTTP_Listener_config" 
+			path="/orders" 
+			allowedMethods="POST"
+			doc:name="POST /orders">
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+			</http:response>
+		</http:listener>
+		
+		<set-variable 
+			value="#[attributes.headers['x-correlation-id'] default uuid()]" 
+			variableName="correlationId" 
+			doc:name="Set Correlation ID" />
+		
+		<logger level="WARN" message="#['[SYSTEM-API] Creating order - Incoming payload: ' ++ write(payload, 'application/json')]" />
+		
+		<!-- Store original payload BEFORE OAuth call -->
+		<set-variable 
+			value="#[payload]" 
+			variableName="originalOrderPayload" 
+			doc:name="Store Original Order Payload" />
+		
+		<!-- Store order items for later -->
+		<set-variable 
+			value="#[payload.items default []]" 
+			variableName="orderItems" 
+			doc:name="Store Order Items" />
+		
+		<logger level="WARN" message="#['[SYSTEM-API] Creating order via REST API - CorrelationId: ' ++ vars.correlationId]" />
+		
+		<!-- Get OAuth Token -->
+		<flow-ref name="get-salesforce-token-subflow" doc:name="Get OAuth Token" />
+		
+		<!-- Prepare Order for Salesforce REST API -->
+		<ee:transform doc:name="Prepare Order JSON">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	Account__c: vars.originalOrderPayload.accountId,
+	totalAmount__c: vars.originalOrderPayload.totalAmount,
+	status__c: vars.originalOrderPayload.status default "NEW",
+	productName__c: (vars.orderItems map (item) -> 
+		item.productName ++ " (x" ++ item.quantity as String ++ ")"
+	) joinBy ", "
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<logger level="ERROR" message="#[payload]" doc:name="Log Order Payload" />
+		
+		<!-- Create Order via Salesforce REST API -->
+		<http:request 
+			method="POST" 
+			path="/sobjects/Order__c"
+			config-ref="Salesforce_REST_API_Config"
+			doc:name="POST Order to Salesforce">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"Authorization": "Bearer " ++ vars.accessToken
+}]]]></http:headers>
+		</http:request>
+		
+		<set-variable 
+			value="#[payload.id]" 
+			variableName="orderId" 
+			doc:name="Store Order ID" />
+		
+		<logger level="INFO" message="#['Order created with ID: ' ++ vars.orderId]" />
+		
+		<!-- Build Success Response -->
+		<ee:transform doc:name="Success Response">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"orderId": vars.orderId,
+	"success": true,
+	"message": "Order created successfully in Salesforce",
+	"correlationId": vars.correlationId
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
+			</ee:variables>
 		</ee:transform>
 		
 		<error-handler ref="global-error-handler" />

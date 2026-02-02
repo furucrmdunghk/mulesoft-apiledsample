@@ -48,6 +48,19 @@
 		
 		<logger level="INFO" message="#['[PROCESS-API] Processing customer order - CorrelationId: ' ++ vars.correlationId]" />
 		
+		<!-- Normalize payload: items -> orderItems -->
+		<ee:transform doc:name="Normalize Request">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	customer: payload.customer,
+	orderItems: payload.orderItems default payload.items
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
 		<!-- Store original payload -->
 		<set-variable 
 			value="#[payload]" 
@@ -127,15 +140,57 @@ vars.originalRequest.customer]]></ee:set-payload>
 output application/java
 ---
 sum(vars.originalRequest.orderItems map ($.quantity * $.unitPrice))]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				
+				<logger level="INFO" message="#['Order total calculated: ' ++ vars.orderTotal as String]" />
+				
+				<!-- Call System API to create Order in Salesforce -->
+				<ee:transform doc:name="Prepare Order for System API">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"accountId": vars.customerId,
+	"totalAmount": vars.orderTotal,
+	"status": "NEW",
+	"items": vars.originalRequest.orderItems
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				
+				<http:request 
+					method="POST" 
+					path="/orders"
+					config-ref="System_Customer_HTTP_Request_config"
+					doc:name="Create Order in System API">
+					<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type": "application/json",
+	"x-correlation-id" : vars.correlationId
+}]]]></http:headers>
+				</http:request>
+				
+				<set-variable 
+					value="#[payload.orderId]" 
+					variableName="orderId" 
+					doc:name="Set Order ID" />
+				
+				<logger level="INFO" message="#['Order created in Salesforce with ID: ' ++ vars.orderId]" />
+				
+				<!-- Build orderData for response -->
+				<ee:transform doc:name="Set Order Data">
+					<ee:variables>
 						<ee:set-variable variableName="orderData"><![CDATA[%dw 2.0
 output application/json
 ---
 {
-	"customerId": vars.customerId,
-	"orderDate": now(),
-	"totalAmount": vars.orderTotal,
-	"status": "Pending",
-	"items": vars.originalRequest.orderItems
+	customerId: vars.customerId,
+	totalAmount: vars.orderTotal,
+	status: "NEW",
+	items: vars.originalRequest.orderItems
 }]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
@@ -151,6 +206,7 @@ output application/json
 {
 	"success": true,
 	"customerId": vars.customerId,
+	"orderId": vars.orderId,
 	"orderData": vars.orderData,
 	"message": "Customer order processed successfully",
 	"correlationId": vars.correlationId

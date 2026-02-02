@@ -76,14 +76,15 @@ output application/json
 output application/json
 ---
 {
-	"orderId": payload.orderData.customerId ++ "-" ++ (now() as String {format: "yyyyMMddHHmmss"}),
+	"orderId": payload.orderId,
 	"status": "success",
 	"message": "Your order has been placed successfully",
 	"orderSummary": {
+		"orderId": payload.orderId,
 		"customerId": payload.customerId,
 		"totalAmount": payload.orderData.totalAmount,
-		"orderDate": payload.orderData.orderDate,
-		"estimatedDelivery": payload.orderData.orderDate + |P7D|
+		"orderDate": now(),
+		"estimatedDelivery": now() + |P7D|
 	}
 }]]></ee:set-payload>
 			</ee:message>
